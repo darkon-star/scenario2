@@ -10,7 +10,7 @@ float movementSum = 0;
 int sampleCount = 0;
 float avgMovement = 0;
 
-float breathingThreshold = 0.30; // data resaerch
+float breathingThreshold = 4.5; // data resaerch
 
 unsigned long startTime;
 unsigned long lastCheckTime = 0;
@@ -26,6 +26,8 @@ void setup() {
   Serial.begin(115200);
   CircuitPlayground.begin();
 
+  CircuitPlayground.setAccelRange(LIS3DH_RANGE_2_G);
+
   startTime = millis();
 
   Serial.println("time_s,avg_movement_1s,state");
@@ -36,7 +38,7 @@ void loop() {
   Y = CircuitPlayground.motionY();
   Z = CircuitPlayground.motionZ();
 
-  magnitude = sqrt(X * X + Y * Y + Z * Z);
+  magnitude = X * X + Y * Y + Z * Z;
   movementChange = fabs(magnitude - previousMagnitude);
   previousMagnitude = magnitude;
 
@@ -56,11 +58,11 @@ void loop() {
 
       unsigned long lowDuration = now - lowMovementStart;
 
-      if (lowDuration >= 10000) {
+      if (lowDuration >= 8000) {
         state = "ALERT";
         CircuitPlayground.clearPixels();
         setAllPixels(0xFF0000);   // red
-        CircuitPlayground.playTone(880, 200);
+        CircuitPlayground.playTone(1760, 100);
       } else if (lowDuration >= 5000) {
         state = "WARNING";
         CircuitPlayground.clearPixels();
@@ -78,7 +80,7 @@ void loop() {
       setAllPixels(0x00FF00);     // green
     }
 
-    float time_s = (now - startTime) / 3000.0;
+    float time_s = (now - startTime) / 1000.0;
 
     Serial.print(time_s);
     Serial.print(",");
@@ -91,5 +93,5 @@ void loop() {
     lastCheckTime = now;
   }
 
-  delay(100);
+  delay(50);
 }
