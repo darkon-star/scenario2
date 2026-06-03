@@ -1,0 +1,75 @@
+#include <Adafruit_CircuitPlayground.h>
+#include <Adafruit_AHTX0.h>
+#define MAX_SAMPLES 1500
+#define LOG_INTERVAL 1000
+#define TEST_DURATION 1200000  // 20 minutes
+uint32_t timestamps[MAX_SAMPLES];
+int16_t temp_data[MAX_SAMPLES];
+int16_t ay_data[MAX_SAMPLES];
+int16_t az_data[MAX_SAMPLES];
+int sampleIndex = 0;
+unsigned long lastLog = 0;
+unsigned long startTime;
+bool loggingFinished = false;
+bool dumped = false;
+Adafruit_AHTX0 aht;
+
+void setup() {
+  CircuitPlayground.begin();
+  Serial.begin(115200);
+  delay(2000);
+
+  startTime = millis();
+
+  // Start message
+  Serial.println(F("--- LOGGING STARTED ---"));
+}
+void loop() {
+  //  LOGGING
+  if (!loggingFinished) {
+    if ((millis() - startTime >= TEST_DURATION) || (sampleIndex >= MAX_SAMPLES)) {
+      loggingFinished = true;
+      Serial.println(F("--- LOGGING FINISHED ---"));
+    }
+    if (millis() - lastLog >= LOG_INTERVAL) {
+      lastLog = millis();
+      if (sampleIndex < MAX_SAMPLES) {
+        timestamps[sampleIndex] = millis();
+
+        // Create variables to hold the sensor data
+        sensors_event_t humidity, temp;
+        // Populate those variables with the latest reading
+        aht.getEvent(&humidity, &temp);
+
+        temp_data[sampleIndex] = (int16_t)(temp.temperature * 1000);
+        
+
+        sampleIndex++;
+      }
+    }
+  }
+
+  //  MANUAL DUMP (hold button)
+  if (CircuitPlayground.leftButton() && !dumped) {
+    Serial.println(F("--- MANUAL DUMP ---"));
+    loggingFinished = true;
+  }
+  //  DUMP
+  if (loggingFinished && !dumped) {
+    dumpData();
+  }
+}
+void dumpData() {
+  dumped = true;
+
+  Serial.println(F("=== DATA START ==="));
+
+  for (int i = 0; i < sampleIndex; i++) {
+    Serial.print(timestamps[i]);
+    Serial.print(",");
+
+    Serial.print(temp_data[i]/1000,3);
+    
+  }
+  Serial.println(F("=== DATA END ==="));
+}
