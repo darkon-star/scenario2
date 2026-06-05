@@ -3,26 +3,26 @@
 
 Adafruit_AHTX0 aht;
 
-const int flexPin = A2;
+const int flexPin = A2;  // flex sensor is connected to A2
 
 float smoothValue = 0;
-float alpha = 0.15;
+float alpha = 0.15;  // smoothing factor
 
 float highValue = 0;
 float lowValue = 1023;
-float flexChange = 0;
+float flexChange = 0;  // range of the flex sensor signal in one time window
 
-const unsigned long windowTime = 3000;
+const unsigned long windowTime = 3000;  // 3-second window for breathing detection
 unsigned long windowStart = 0;
 
-const float BREATHING_THRESHOLD = 5.0;
+const float BREATHING_THRESHOLD = 5.0;  // minimum flex change needed to count as breathing movement
 
 int lowWindowCount = 0;
 int normalWindowCount = 0;
 
-const int WARNING_LOW_WINDOWS = 3;
-const int ALERT_LOW_WINDOWS = 7;
-const int RECOVERY_NORMAL_WINDOWS = 2;
+const int WARNING_LOW_WINDOWS = 3;  // about 9 seconds of low movement
+const int ALERT_LOW_WINDOWS = 7;  // about 21 seconds of low movement
+const int RECOVERY_NORMAL_WINDOWS = 2;  // needs 2 normal windows to return to normal
 
 float temperatureC = 0;
 
@@ -33,7 +33,7 @@ String breathingState = "NORMAL";
 String tempState = "NORMAL";
 String overallState = "NORMAL";
 
-bool systemOn = false;
+bool systemOn = false;  // used to control whether the system is running
 
 bool lastRightButton = false;
 bool lastLeftButton = false;
@@ -41,7 +41,7 @@ bool lastLeftButton = false;
 unsigned long startTime = 0;
 
 unsigned long lastPrint = 0;
-const unsigned long PRINT_INTERVAL = 200;
+const unsigned long PRINT_INTERVAL = 200;  // print data every 200 ms
 
 void setup() {
   CircuitPlayground.begin();
@@ -61,10 +61,12 @@ void loop() {
   bool rightButton = CircuitPlayground.rightButton();
   bool leftButton = CircuitPlayground.leftButton();
 
+  // right button starts the system
   if (rightButton && !lastRightButton) {
     startSystem();
   }
 
+  // left button stops the system
   if (leftButton && !lastLeftButton) {
     stopSystem();
   }
@@ -72,6 +74,7 @@ void loop() {
   lastRightButton = rightButton;
   lastLeftButton = leftButton;
 
+  // if the system is off, do nothing except keep the lights off
   if (!systemOn) {
     CircuitPlayground.clearPixels();
     delay(50);
@@ -80,8 +83,10 @@ void loop() {
 
   int raw = analogRead(flexPin);
 
+  // smooth the raw flex sensor value to reduce small noise
   smoothValue = alpha * raw + (1 - alpha) * smoothValue;
 
+  // keep updating the highest and lowest smooth value in the current 3-second window
   if (smoothValue > highValue) {
     highValue = smoothValue;
   }
@@ -90,16 +95,19 @@ void loop() {
     lowValue = smoothValue;
   }
 
+  // read temperature from AHT20
   sensors_event_t humidity, temp;
   aht.getEvent(&humidity, &temp);
   temperatureC = temp.temperature;
 
   updateTempState();
 
+  // every 3 seconds, calculate the range of the flex signal
   if (currentTime - windowStart >= windowTime) {
     flexChange = highValue - lowValue;
     updateBreathingState();
 
+   // reset the window for the next 3 seconds
     highValue = smoothValue;
     lowValue = smoothValue;
     windowStart = currentTime;
@@ -108,6 +116,7 @@ void loop() {
   updateOverallState();
   updateOutput();
 
+  // print only the main values need for checking and recording
   if (currentTime - lastPrint >= PRINT_INTERVAL) {
     lastPrint = currentTime;
 
@@ -131,6 +140,7 @@ void startSystem() {
   startTime = millis();
   lastPrint = millis();
 
+  // initialise the flex sensor reading when the system starts
   int raw = analogRead(flexPin);
   smoothValue = raw;
 
@@ -164,9 +174,12 @@ void stopSystem() {
 }
 
 void updateBreathingState() {
+  // if the flex sensor changes enough in 3 seconds, count it as breathing movement
   if (flexChange >= BREATHING_THRESHOLD) {
     normalWindowCount++;
 
+    // one normal window is not enough to reset the alarm
+    // this avoids one accidental movement cancelling the warning
     if (normalWindowCount >= RECOVERY_NORMAL_WINDOWS) {
       lowWindowCount = 0;
       breathingState = "NORMAL";
@@ -174,6 +187,7 @@ void updateBreathingState() {
   }
 
   else {
+    // if the flex change is too small, count it as one low movement window
     lowWindowCount++;
     normalWindowCount = 0;
 
@@ -192,6 +206,7 @@ void updateBreathingState() {
 }
 
 void updateTempState() {
+  // warning and alert thresholds of temperature sensor
   if (temperatureC >= TEMP_ALERT) {
     tempState = "ALERT";
   }
@@ -206,6 +221,7 @@ void updateTempState() {
 }
 
 void updateOverallState() {
+  // alert has the highest priority, then warning, then low movement
   if (breathingState == "ALERT" || tempState == "ALERT") {
     overallState = "ALERT";
   }
@@ -226,32 +242,33 @@ void updateOverallState() {
 void updateOutput() {
   CircuitPlayground.clearPixels();
 
+  // breathing alerts are checked first because they are more urgent in our prototype
   if (breathingState == "ALERT") {
-    setAllPixels(255, 0, 0);
+    setAllPixels(255, 0, 0);        // red
     playBreathingAlertSound();
   }
 
   else if (tempState == "ALERT") {
-    setAllPixels(180, 0, 255);
+    setAllPixels(180, 0, 255);      // purple
     playTemperatureAlertSound();
   }
 
   else if (breathingState == "WARNING") {
-    setAllPixels(255, 80, 0);
+    setAllPixels(255, 80, 0);       // orange
     playBreathingWarningSound();
   }
 
   else if (tempState == "WARNING") {
-    setAllPixels(255, 255, 0);
+    setAllPixels(255, 255, 0);      // yellow
     playTemperatureWarningSound();
   }
 
   else if (breathingState == "LOW_MOVEMENT") {
-    setAllPixels(255, 255, 255);
+    setAllPixels(255, 255, 255);    // white
   }
 
   else {
-    setAllPixels(0, 255, 0);
+    setAllPixels(0, 255, 0);        // green
   }
 }
 
@@ -278,6 +295,7 @@ void playTemperatureAlertSound() {
 }
 
 void setAllPixels(int r, int g, int b) {
+  // set all 10 LEDs to the same colour
   for (int i = 0; i < 10; i++) {
     CircuitPlayground.setPixelColor(i, r, g, b);
   }
